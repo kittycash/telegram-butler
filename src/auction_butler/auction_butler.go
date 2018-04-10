@@ -282,13 +282,11 @@ func (bot *Bot) handleGroupMessage(ctx *Context) error {
 		}
 
 		auction := bot.db.GetCurrentAuction()
-		if bot.runningCountDown {
-			if auction == nil {
-				if !ctx.User.Admin {
-					bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
-				}
-				return errors.New("No ongoing auction")
+		if auction == nil {
+			if !ctx.User.Admin {
+				bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
 			}
+			return errors.New("No ongoing auction")
 		}
 		if bid.CoinType == auction.BidType {
 			if bid.Value <= auction.BidVal {

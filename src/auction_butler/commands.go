@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"github.com/bcampbell/fuzzytime"
-	"github.com/go-errors/errors"
+	"errors"
 )
 
 type Command struct {
