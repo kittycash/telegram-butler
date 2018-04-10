@@ -65,8 +65,12 @@ type Chat struct {
 }
 
 type Auction struct {
-	ID          int      `json:"id"`
-	EndTime     NullTime `db:"end_time" json:"end_time"`
+	ID        int      `db:"id" json:"id"`
+	EndTime   NullTime `db:"end_time" json:"end_time"`
+	BidVal    float64  `db:"bid_val"  json:"bid_val"`
+	BidType   string   `db:"bid_type" json:"bid_type"`
+	MessageID int      `db:"bid_msg_id" json:"bid_msg_id"`
+	Ended     bool     `db:"ended" json:"ended"`
 }
 
 func (d Duration) Value() (driver.Value, error) {

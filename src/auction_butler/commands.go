@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"github.com/bcampbell/fuzzytime"
+	"github.com/go-errors/errors"
 )
 
 type Command struct {
@@ -49,17 +50,22 @@ func (bot *Bot) handleCommandHelp(ctx *Context, command, args string) error {
 
 func (bot *Bot) handleSetAuctionInfo(ctx *Context, command, args string) error {
 	end, err := parseStartAuctioArgs(args)
+	fmt.Println("comes here for auction settings")
 	if err != nil {
 		return fmt.Errorf("could not understand: %v", err)
 	}
 
+	bot.runningCountDown = false
+	bot.Reschedule()
 	return bot.db.PutAuction(end)
 }
 
 func (bot *Bot) handleGetAuctionInfo(ctx *Context, command, args string) error {
     auction := bot.db.GetCurrentAuction()
-
-    return bot.Reply(ctx, fmt.Sprintf(`Auction End Time: %s`,  auction.EndTime.Time.String()))
+	if auction == nil {
+		return errors.New("No auction found")
+	}
+    return bot.Reply(ctx, fmt.Sprintf(`Auction End Time: %s`,  auction.EndTime.Time.UTC().String()))
 }
 
 func parseStartAuctioArgs(args string) (end time.Time, err error) {

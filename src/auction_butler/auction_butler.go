@@ -2,9 +2,11 @@ package auction_butler
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
+	"errors"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/telegram-bot-api.v4"
 )
@@ -42,6 +44,18 @@ type Bid struct {
 
 type CommandHandler func(*Bot, *Context, string, string) error
 type MessageHandler func(*Bot, *Context, string) (bool, error)
+
+func (b *Bid) String() string {
+	return fmt.Sprintf("%v %v", b.Value, b.CoinType)
+}
+
+func (b *Bid) Convert(conversionFactor int64) string {
+	if b.CoinType == "SKY" {
+		return fmt.Sprintf("%.2f %v", b.Value/float64(conversionFactor), "BTC")
+	}
+
+	return fmt.Sprintf("%v %v", math.Ceil(b.Value*float64(conversionFactor)), "SKY")
+}
 
 func (bot *Bot) enableUser(u *User) ([]string, error) {
 	var actions []string
@@ -210,6 +224,13 @@ func (bot *Bot) handleUserLeft(ctx *Context, user *tgbotapi.User) error {
 	return nil
 }
 
+func (bot *Bot) DeleteMsg(chatID int64, msgID int) {
+	bot.telegram.DeleteMessage(tgbotapi.DeleteMessageConfig{
+		bot.config.ChatID,
+		msgID,
+	})
+}
+
 func (bot *Bot) removeMyName(text string) (string, bool) {
 	var removed bool
 	var words []string
@@ -251,27 +272,67 @@ func (bot *Bot) handleGroupMessage(ctx *Context) error {
 
 	if ctx.User != nil {
 		bid, err := findBid(ctx.message.Text)
+
 		//TODO (therealssj): return msgs based on the err returned
 		if err != nil {
+			if err == ErrNoBidFound && !ctx.User.Admin {
+				bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
+			}
 			return err
 		}
 
-		//TODO (therealssj): add something to retry sending?
-		msg, _ := bot.Send(ctx, "yell", "html", fmt.Sprintf(`Current bid of ? ?
+		auction := bot.db.GetCurrentAuction()
+		if bot.runningCountDown {
+			if auction == nil {
+				if !ctx.User.Admin {
+					bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
+				}
+				return errors.New("No ongoing auction")
+			}
+		}
+		if bid.CoinType == auction.BidType {
+			if bid.Value <= auction.BidVal {
+				if !ctx.User.Admin {
+					bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
+				}
+				return fmt.Errorf("bid not more than last bid of %v", auction.BidVal)
+			}
+		} else {
+			switch bid.CoinType {
+			case "BTC":
+				if bid.Value*float64(bot.config.ConversionFactor) <= auction.BidVal {
+					if !ctx.User.Admin {
+						bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
+					}
+					return errors.New("bid less than last bid")
 
-Bids only please.`, bid.Value, bid.CoinType))
+				}
+			case "SKY":
+				if bid.Value/float64(bot.config.ConversionFactor) <= auction.BidVal {
+					if !ctx.User.Admin {
+						bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
+					}
+					return errors.New("bid less than last bid")
+				}
+			}
+		}
+		bot.db.SetAuctionBid(auction.ID, bid)
+		bot.bidChan <- 1
+
+		//TODO (therealssj): add something to retry sending?
+		msg, _ := bot.Send(ctx, "yell", "html", fmt.Sprintf(`<b>Current bid of %v/%v</b>
+
+Bids only please.`, bid.String(), bid.Convert(bot.config.ConversionFactor)))
 
 		if bot.lastBidMessage != nil {
-			bot.telegram.DeleteMessage(tgbotapi.DeleteMessageConfig{
-				ChatID:    bot.config.ChatID,
-				MessageID: bot.lastBidMessage.message.MessageID,
-			})
+			bot.DeleteMsg(bot.config.ChatID, bot.lastBidMessage.message.MessageID)
 		}
 
 		bot.lastBidMessage = &Context{
-			message:msg,
-			User: ctx.User,
+			message: msg,
+			User:    ctx.User,
 		}
+
 	}
 
 	return gerr
@@ -406,7 +467,18 @@ func (bot *Bot) handleUpdate(update *tgbotapi.Update) error {
 
 func (bot *Bot) Start() error {
 	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
+	u.Timeout = 10
+
+	//curAuction := bot.db.GetCurrentAuction()
+	//
+	//if curAuction != nil && curAuction.MessageID != 0 {
+	//	bot.lastBidMessage = &Context{
+	//		message: &tgbotapi.Message{
+	//			MessageID: curAuction.MessageID,
+	//		},
+	//		User: &User{},
+	//	}
+	//}
 
 	updates, err := bot.telegram.GetUpdatesChan(u)
 	if err != nil {
@@ -418,12 +490,13 @@ func (bot *Bot) Start() error {
 	}
 
 	go bot.maintain()
-
 	for update := range updates {
 		if err := bot.handleUpdate(&update); err != nil {
 			log.Printf("error: %v", err)
 		}
 	}
+
+	close(bot.bidChan)
 	log.Printf("stopped")
 	return nil
 }

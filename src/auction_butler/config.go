@@ -14,4 +14,5 @@ type Config struct {
 	CountdownFrom            int64          `json:"countdown_from"`
 	ResettingCountdownFrom   int64          `json:"resetting_countdown_from"`
 	MsgDeleteCounter         Duration       `json:"msg_destroy_counter"`
+	ConversionFactor         int64          `json:"conversion_factor"`
 }

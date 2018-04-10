@@ -123,7 +123,7 @@ func (db *DB) GetUserCount(banned bool) (int, error) {
 func (db *DB) GetCurrentAuction() *Auction {
 	var auction Auction
 
-	err := db.Get(&auction, db.Rebind("select * from auction where end_time>now()"))
+	err := db.Get(&auction, db.Rebind("select * from auction where ended=false and end_time>now()"))
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -139,9 +139,26 @@ func (db *DB) GetCurrentAuction() *Auction {
 func (db *DB) PutAuction(end time.Time) error {
 	_, err := db.Exec(db.Rebind(`
 		insert into auction (
-			end_time
-		) values (?)`),
-		end,
+			end_time, bid_val, bid_type
+		) values (?, ?, ?)`),
+		end, 0, "",
+	)
+
+	return err
+}
+
+func (db *DB) SetAuctionBid(id int, bid *Bid) error {
+	_, err := db.Exec(db.Rebind(`
+		update auction set bid_val= ?, bid_type = ? where id = ?`),
+		bid.Value, bid.CoinType, id,
+	)
+
+	return err
+}
+
+func (db *DB) EndAuction() error {
+	_, err := db.Exec(db.Rebind(`
+		update auction set ended=true where ended=false`),
 	)
 
 	return err

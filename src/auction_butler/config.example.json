@@ -1,13 +1,14 @@
 {
   "debug": true,
-  "token": "123:AAaaaSSsssDDddd",
-  "chat_id": -2250,
+  "token": "asdasdas",
+  "chat_id": 112321,
   "database": {
-    "driver": "test",
-    "source": "dbname=test user=test"
+    "driver": "postgres",
+    "source": "dbname=asdas user=asdas sslmode=disable"
   },
   "reminder_announce_interval": "1h",
   "countdown_from": 100,
   "resetting_countdown_from": 10,
-  "msg_destroy_counter": "90s"
+  "msg_destroy_counter": "90s",
+  "conversion_factor": 525
 }

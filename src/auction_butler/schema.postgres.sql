@@ -12,6 +12,10 @@ CREATE TABLE botuser (
 
 
 create table auction (
-  id INT AUTO_INCREMENT PRIMARY KEY NOT NULL, -- auto incrementing auction id
+  id SERIAL PRIMARY KEY, -- auto incrementing auction id
   end_time TIMESTAMP WITH TIME zone, -- auction end time
+  bid_val FLOAT,
+  bid_type TEXT,
+  bid_msg_id INT default 0,
+  ended bool DEFAULT FALSE
 );

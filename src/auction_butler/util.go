@@ -1,16 +1,17 @@
 package auction_butler
 
 import (
+	"errors"
 	"fmt"
+	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
-	"regexp"
-	"errors"
 )
 
 var (
-	ErrNoBidFound = errors.New("no bid found in message")
+	ErrNoBidFound       = errors.New("no bid found in message")
 	ErrUnableToParseBid = errors.New("unable to parse bid")
 )
 
@@ -70,13 +71,13 @@ func SplitToString(a []int, sep string) string {
 }
 
 func findBid(bidStr string) (*Bid, error) {
-	r := regexp.MustCompile(`(\d+((?:\.|,)\d*)?|(?:\.|,)\d+)\s*(?:BTC|SKY)?`)
+	r := regexp.MustCompile(`(\d+((?:\.|,)\d*)?|(?:\.|,)\d+)\s*(BTC|SKY)?`)
 	matches := r.FindStringSubmatch(bidStr)
 	if len(matches) == 0 {
 		return nil, ErrNoBidFound
 	}
 
-	bid := parseBid(matches[1])
+	bid := parseBid(matches[1], matches[3])
 	if bid == nil {
 		return nil, ErrUnableToParseBid
 	}
@@ -84,7 +85,7 @@ func findBid(bidStr string) (*Bid, error) {
 	return bid, nil
 }
 
-func parseBid(bid string) *Bid {
+func parseBid(bid string, foundBidType string) *Bid {
 	var bidValue float64
 	var bidType string
 
@@ -94,14 +95,24 @@ func parseBid(bid string) *Bid {
 		return nil
 	}
 
-	if bidValue > 5 {
-		bidType = "SKY"
+	if foundBidType != "" {
+		bidType = foundBidType
 	} else {
-		bidType = "BTC"
+		if bidValue > 5 {
+			bidType = "SKY"
+		} else {
+			bidType = "BTC"
+		}
+	}
+
+	if bidType == "BTC" {
+		bidValue = toFixed(bidValue, 2)
+	} else {
+		bidValue = toFixed(bidValue, 0)
 	}
 
 	return &Bid{
-		Value: bidValue,
+		Value:    bidValue,
 		CoinType: bidType,
 	}
 }
@@ -110,5 +121,14 @@ func niceTime(time time.Time) string {
 	//18:00 UTC 24.03
 	return fmt.Sprintf("%v:%v %v %v.%v", time.Hour(), time.Minute(), time.Location().String(), time.Day(), time.Month())
 
+}
+
+func round(num float64) int {
+	return int(num + math.Copysign(0.5, num))
+}
+
+func toFixed(num float64, precision int) float64 {
+	output := math.Pow(10, float64(precision))
+	return float64(round(num * output)) / output
 }
 
