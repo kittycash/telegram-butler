@@ -49,15 +49,24 @@ func (bot *Bot) handleCommandHelp(ctx *Context, command, args string) error {
 }
 
 func (bot *Bot) handleSetAuctionInfo(ctx *Context, command, args string) error {
-	end, err := parseStartAuctioArgs(args)
-	fmt.Println("comes here for auction settings")
+	auction := bot.db.GetCurrentAuction()
+	if auction != nil {
+		return bot.Reply(ctx, fmt.Sprintf("An auction is already scheduled to end at %s", auction.EndTime.Time.UTC().String()))
+	}
+
+	end, err := parseStartAuctionArgs(args)
 	if err != nil {
 		return fmt.Errorf("could not understand: %v", err)
 	}
 
 	bot.runningCountDown = false
 	bot.Reschedule()
-	return bot.db.PutAuction(end)
+	err = bot.db.PutAuction(end)
+	if err != nil {
+		return bot.Reply(ctx, fmt.Sprintf("failed to set an auction: %v", err))
+	} else {
+		return bot.Reply(ctx, fmt.Sprintf("Auction scheduled to end at: %s", end.UTC().String()))
+	}
 }
 
 func (bot *Bot) handleGetAuctionInfo(ctx *Context, command, args string) error {
@@ -68,7 +77,7 @@ func (bot *Bot) handleGetAuctionInfo(ctx *Context, command, args string) error {
     return bot.Reply(ctx, fmt.Sprintf(`Auction End Time: %s`,  auction.EndTime.Time.UTC().String()))
 }
 
-func parseStartAuctioArgs(args string) (end time.Time, err error) {
+func parseStartAuctionArgs(args string) (end time.Time, err error) {
 	words := strings.Fields(args)
 	if len(words) == 0 {
 		err = fmt.Errorf("insufficient arguments")

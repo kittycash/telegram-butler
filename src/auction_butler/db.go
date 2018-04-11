@@ -123,7 +123,7 @@ func (db *DB) GetUserCount(banned bool) (int, error) {
 func (db *DB) GetCurrentAuction() *Auction {
 	var auction Auction
 
-	err := db.Get(&auction, db.Rebind("select * from auction where ended=false and end_time>now()"))
+	err := db.Get(&auction, db.Rebind("select * from auction where ended=false and end_time>now() order by id asc limit 1"))
 	if err == sql.ErrNoRows {
 		return nil
 	}
