@@ -1,12 +1,14 @@
 package auction_butler
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"os"
+	"os/signal"
 	"strings"
 	"time"
 
-	"errors"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/telegram-bot-api.v4"
 )
@@ -24,15 +26,21 @@ type Bot struct {
 	privateMessageHandlers []MessageHandler
 	groupMessageHandlers   []MessageHandler
 	rescheduleChan         chan int
-	lastBidMessage         *Context
+	lastBidMessage         *LastBidMessage
 	auctionEndTime         time.Time
 	runningCountDown       bool
 	bidChan                chan int
+	currentAuction         *Auction
 }
 
 type Context struct {
 	message *tgbotapi.Message
 	User    *User
+}
+
+type LastBidMessage struct {
+	BotMsg  *tgbotapi.Message
+	UserMsg *tgbotapi.Message
 }
 
 type Bid struct {
@@ -272,8 +280,6 @@ func (bot *Bot) handleGroupMessage(ctx *Context) error {
 
 	if ctx.User != nil {
 		bid, err := findBid(ctx.message.Text)
-
-		//TODO (therealssj): return msgs based on the err returned
 		if err != nil {
 			if err == ErrNoBidFound && !ctx.User.Admin {
 				bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
@@ -281,7 +287,7 @@ func (bot *Bot) handleGroupMessage(ctx *Context) error {
 			return err
 		}
 
-		auction := bot.db.GetCurrentAuction()
+		auction := bot.currentAuction
 		if auction == nil {
 			if !ctx.User.Admin {
 				bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
@@ -314,23 +320,33 @@ func (bot *Bot) handleGroupMessage(ctx *Context) error {
 				}
 			}
 		}
-		bot.db.SetAuctionBid(auction.ID, bid)
-		bot.bidChan <- 1
 
-		//TODO (therealssj): add something to retry sending?
-		msg, _ := bot.Send(ctx, "yell", "html", fmt.Sprintf(`<b>Current bid of %v/%v</b>
-
+		var msg *tgbotapi.Message
+		if auction.EndTime.Time.Sub(time.Now().UTC()) > 0 {
+			msg, _ = bot.Send(ctx, "yell", "html", fmt.Sprintf(`<b>Current bid of %v/%v</b>
+Bids only please. Auction Ends in %s`, bid.String(), bid.Convert(bot.config.ConversionFactor),
+				auction.EndTime.Time.Sub(time.Now().UTC()).Truncate(10e8)))
+		} else {
+			msg, _ = bot.Send(ctx, "yell", "html", fmt.Sprintf(`<b>Current bid of %v/%v</b>
 Bids only please.`, bid.String(), bid.Convert(bot.config.ConversionFactor)))
+		}
 
+		// update auction data
+		auction.BidVal = bid.Value
+		auction.BidType = bid.CoinType
+		auction.BidMessageID = msg.MessageID
+		auction.exists = true
+		bot.currentAuction = auction
 		if bot.lastBidMessage != nil {
-			bot.DeleteMsg(bot.config.ChatID, bot.lastBidMessage.message.MessageID)
+			bot.DeleteMsg(bot.config.ChatID, bot.lastBidMessage.BotMsg.MessageID)
+			bot.lastBidMessage.BotMsg = msg
+			bot.lastBidMessage.UserMsg = ctx.message
+		} else {
+			bot.lastBidMessage = &LastBidMessage{
+				BotMsg:  msg,
+				UserMsg: ctx.message,
+			}
 		}
-
-		bot.lastBidMessage = &Context{
-			message: msg,
-			User:    ctx.User,
-		}
-
 	}
 
 	return gerr
@@ -359,6 +375,8 @@ func (bot *Bot) Send(ctx *Context, mode, format, text string) (*tgbotapi.Message
 	default:
 		return nil, fmt.Errorf("unsupported message format: %s", format)
 	}
+
+	msg.DisableWebPagePreview = true
 
 	sentMsg, err := bot.telegram.Send(msg)
 	return &sentMsg, err
@@ -431,33 +449,44 @@ func (bot *Bot) handleUpdate(update *tgbotapi.Update) error {
 	}
 	ctx := Context{message: update.Message}
 	if u := ctx.message.From; u != nil {
-		dbuser := bot.db.GetUser(u.ID)
-		if dbuser == nil {
-			member, err := bot.telegram.GetChatMember(tgbotapi.ChatConfigWithUser{
-				ChatID: ctx.message.Chat.ID,
-				UserID: u.ID,
-			})
-			if err != nil {
-				return fmt.Errorf("unable to fetch chat member %v", u.UserName)
+		if !bot.runningCountDown {
+			log.Info("Comes here")
+			dbuser := bot.db.GetUser(u.ID)
+			if dbuser == nil {
+				member, err := bot.telegram.GetChatMember(tgbotapi.ChatConfigWithUser{
+					ChatID: ctx.message.Chat.ID,
+					UserID: u.ID,
+				})
+				if err != nil {
+					return fmt.Errorf("unable to fetch chat member %v", u.UserName)
+				}
+				admin := member.IsAdministrator() || member.IsCreator()
+				log.Printf("message from untracked user: %s", u.String())
+				if (ctx.message.Chat.IsGroup() || ctx.message.Chat.IsSuperGroup()) && ctx.message.Chat.ID == bot.config.ChatID {
+					dbuser = &User{
+						ID:        u.ID,
+						UserName:  u.UserName,
+						FirstName: u.FirstName,
+						LastName:  u.LastName,
+						Admin:     admin,
+					}
+					if err := bot.db.PutUser(dbuser); err != nil {
+						return fmt.Errorf("failed to save the user: %v", err)
+					}
+				} else {
+					return bot.Reply(&ctx, "Please join the kittycash auction group.")
+				}
 			}
-			admin := member.IsAdministrator() || member.IsCreator()
-			log.Printf("message from untracked user: %s", u.String())
-			if (ctx.message.Chat.IsGroup() || ctx.message.Chat.IsSuperGroup()) && ctx.message.Chat.ID == bot.config.ChatID {
-				dbuser = &User{
-					ID:        u.ID,
-					UserName:  u.UserName,
-					FirstName: u.FirstName,
-					LastName:  u.LastName,
-					Admin:     admin,
-				}
-				if err := bot.db.PutUser(dbuser); err != nil {
-					return fmt.Errorf("failed to save the user: %v", err)
-				}
-			} else {
-				return bot.Reply(&ctx, "Please join the kittycash auction group.")
+			ctx.User = dbuser
+		} else {
+			ctx.User =  &User{
+				ID:        u.ID,
+				UserName:  u.UserName,
+				FirstName: u.FirstName,
+				LastName:  u.LastName,
+				Admin:     false,
 			}
 		}
-		ctx.User = dbuser
 	}
 
 	return bot.handleMessage(&ctx)
@@ -465,36 +494,50 @@ func (bot *Bot) handleUpdate(update *tgbotapi.Update) error {
 
 func (bot *Bot) Start() error {
 	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 10
+	u.Timeout = 0
 
-	//curAuction := bot.db.GetCurrentAuction()
-	//
-	//if curAuction != nil && curAuction.MessageID != 0 {
-	//	bot.lastBidMessage = &Context{
-	//		message: &tgbotapi.Message{
-	//			MessageID: curAuction.MessageID,
-	//		},
-	//		User: &User{},
-	//	}
-	//}
+	curAuction := bot.db.GetCurrentAuction()
+
+	if curAuction != nil {
+		if curAuction.BidMessageID != 0 {
+			bot.lastBidMessage = &LastBidMessage{
+				BotMsg: &tgbotapi.Message{
+					MessageID: curAuction.BidMessageID,
+				},
+			}
+		}
+
+		bot.currentAuction = curAuction
+	}
 
 	updates, err := bot.telegram.GetUpdatesChan(u)
 	if err != nil {
 		return fmt.Errorf("failed to create telegram updates channel: %v", err)
 	}
 
-	if err != nil {
-		return fmt.Errorf("invalid bot msg announce interval: %v", err)
-	}
-
 	go bot.maintain()
 	for update := range updates {
+		log.Info("Received a new update")
 		if err := bot.handleUpdate(&update); err != nil {
 			log.Printf("error: %v", err)
 		}
 	}
 
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for sig := range c {
+			log.Info(sig.String())
+			bot.db.PutAuction(bot.currentAuction)
+			close(c)
+			return
+		}
+	}()
+
 	close(bot.bidChan)
+	if bot.currentAuction != nil {
+		bot.db.PutAuction(bot.currentAuction)
+	}
 	log.Printf("stopped")
 	return nil
 }

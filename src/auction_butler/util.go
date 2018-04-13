@@ -71,7 +71,7 @@ func SplitToString(a []int, sep string) string {
 }
 
 func findBid(bidStr string) (*Bid, error) {
-	r := regexp.MustCompile(`(\d+((?:\.|,)\d*)?|(?:\.|,)\d+)\s*(BTC|SKY)?`)
+	r := regexp.MustCompile(`(?i)(\d+((?:\.|,)\d*)?|(?:\.|,)\d+)\s*(BTC|SKY)?`)
 	matches := r.FindStringSubmatch(bidStr)
 	if len(matches) == 0 {
 		return nil, ErrNoBidFound
@@ -95,8 +95,14 @@ func parseBid(bid string, foundBidType string) *Bid {
 		return nil
 	}
 
+	foundBidType = strings.ToUpper(foundBidType)
+
 	if foundBidType != "" {
-		bidType = foundBidType
+		if foundBidType == "SKY" || foundBidType == "BTC" {
+			bidType = foundBidType
+		} else {
+			return nil
+		}
 	} else {
 		if bidValue > 5 {
 			bidType = "SKY"

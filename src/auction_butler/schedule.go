@@ -19,7 +19,7 @@ func (bot *Bot) schedule() (task, time.Time) {
 	if bot.runningCountDown {
 		return nothing, time.Time{}
 	}
-	auction := bot.db.GetCurrentAuction()
+	auction := bot.currentAuction
 	if auction == nil {
 		return nothing, time.Time{}
 	}
@@ -36,7 +36,6 @@ func (bot *Bot) schedule() (task, time.Time) {
 // Returns a more detailed version than `schedule()`
 // of what to do next (including announcements).
 func (bot *Bot) subSchedule() (task, time.Time) {
-	fmt.Println(bot.runningCountDown)
 	if bot.runningCountDown {
 		return nothing, time.Now().Add(time.Second * 10)
 	}
@@ -51,7 +50,6 @@ func (bot *Bot) subSchedule() (task, time.Time) {
 
 	announcements := time.Until(future) / every
 	if announcements <= 0 {
-		fmt.Println("this reminder")
 		future := time.Until(future)
 		if tsk == endAuction && future < time.Duration(time.Second*300)  && future > time.Duration(time.Second * 180) {
 			// make a reminder announcement after 2 minutes
@@ -66,8 +64,6 @@ func (bot *Bot) subSchedule() (task, time.Time) {
 	}
 
 	nearFuture := future.Add(-announcements * every)
-	fmt.Println(nearFuture)
-	fmt.Println("no, this reminder")
 	switch tsk {
 	case endAuction:
 		// make a reminder announcement soon
@@ -79,7 +75,7 @@ func (bot *Bot) subSchedule() (task, time.Time) {
 }
 
 func (bot *Bot) perform(tsk task) {
-	event := bot.db.GetCurrentAuction()
+	event := bot.currentAuction
 	if event == nil {
 		log.Print("failed to perform the scheduled task: no current auction")
 		return
@@ -90,29 +86,22 @@ func (bot *Bot) perform(tsk task) {
 	case reminderAnnouncement:
 		bot.Send(noctx, "yell", "html", fmt.Sprintf(`Auction ends @%s`, niceTime(bot.auctionEndTime.UTC())))
 	case startCountDown:
-		for i := bot.config.CountdownFrom; i>bot.config.ResettingCountdownFrom; i-- {
-			bot.Send(noctx, "yell", "text", fmt.Sprintf("%v", i))
-			time.Sleep(time.Second * 4)
-		}
-		for i := bot.config.ResettingCountdownFrom; i > 0; i-- {
-			select {
-			// if a bid was placed reset the counter
-			case <-bot.bidChan:
-				if i > 8 {
-					i = 8
-				} else {
-					bot.Send(noctx, "yell", "text", fmt.Sprintf("%v", i))
-					time.Sleep(time.Second * 2)
-				}
-			default:
-				bot.Send(noctx, "yell", "text", fmt.Sprintf("%v", i))
-				time.Sleep(time.Second * 2)
-			}
-		}
+		bot.runningCountDown = true
 
-		bot.Reply(bot.lastBidMessage, `Please PM @erichkaestner`)
+		for i := bot.config.CountdownFrom; i>0; i-- {
+			bot.Send(noctx, "yell", "text", fmt.Sprintf("%v", i))
+			time.Sleep(time.Second * 2)
+		}
+		bot.Reply(&Context{
+			message: bot.lastBidMessage.UserMsg,
+			User: &User{ID: bot.lastBidMessage.UserMsg.From.ID},
+		}, `Please PM @erichkaestner`)
 		bot.runningCountDown = false
-		fmt.Println(bot.db.EndAuction())
+		// end auction
+		event.Ended = true
+		event.exists = true
+		fmt.Println(bot.db.PutAuction(event))
+		bot.currentAuction = nil
 	default:
 		log.Printf("unsupported task to perform: %v", tsk)
 	}
@@ -124,14 +113,12 @@ func (bot *Bot) maintain() {
 		close(bot.rescheduleChan)
 	}()
 
-	bot.bidChan = make(chan int, 200)
+	bot.bidChan = make(chan int, 2000)
 	var timer *time.Timer
 	for {
 
 		tsk, future := bot.subSchedule()
 
-		fmt.Println(tsk)
-		fmt.Println(future)
 		if timer == nil {
 			timer = time.NewTimer(time.Until(future))
 		} else {
@@ -147,7 +134,6 @@ func (bot *Bot) maintain() {
 			}
 		}
 
-		fmt.Println("finally")
 	}
 }
 

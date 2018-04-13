@@ -49,28 +49,60 @@ func (bot *Bot) handleCommandHelp(ctx *Context, command, args string) error {
 }
 
 func (bot *Bot) handleSetAuctionInfo(ctx *Context, command, args string) error {
-	auction := bot.db.GetCurrentAuction()
+	auction := bot.currentAuction
 	if auction != nil {
 		return bot.Reply(ctx, fmt.Sprintf("An auction is already scheduled to end at %s", auction.EndTime.Time.UTC().String()))
 	}
 
 	end, err := parseStartAuctionArgs(args)
 	if err != nil {
-		return fmt.Errorf("could not understand: %v", err)
+		return fmt.Errorf("could not parse the date: %v", err)
 	}
 
 	bot.runningCountDown = false
-	bot.Reschedule()
-	err = bot.db.PutAuction(end)
+	auction = &Auction{
+		EndTime: NewNullTime(end),
+		Ended: false,
+	}
+	err = bot.db.PutAuction(auction)
 	if err != nil {
 		return bot.Reply(ctx, fmt.Sprintf("failed to set an auction: %v", err))
 	} else {
+		bot.currentAuction = auction
+		bot.Reschedule()
 		return bot.Reply(ctx, fmt.Sprintf("Auction scheduled to end at: %s", end.UTC().String()))
 	}
 }
 
+func (bot *Bot) handleEditAuctionInfo(ctx *Context, command, args string) error {
+	auction := bot.currentAuction
+	if auction == nil {
+		return bot.Reply(ctx, fmt.Sprintf("No auction is scheduled"))
+	}
+
+	end, err := parseStartAuctionArgs(args)
+	if err != nil {
+		return fmt.Errorf("could not parse the date: %v", err)
+	}
+
+	// update the auction info
+	auction.EndTime = NewNullTime(end)
+	err = bot.db.PutAuction(auction)
+	if err != nil {
+		return bot.Reply(ctx, fmt.Sprintf("unable to update auction: %v", err))
+	}
+
+	// reschedule the bot
+	bot.Reschedule()
+
+	return bot.Reply(ctx, "Auction updated!")
+}
+
+
+//func (bot *Bot) handleAnnounce(ctx, command, args string)
+
 func (bot *Bot) handleGetAuctionInfo(ctx *Context, command, args string) error {
-    auction := bot.db.GetCurrentAuction()
+    auction := bot.currentAuction
 	if auction == nil {
 		return errors.New("No auction found")
 	}
@@ -160,4 +192,14 @@ var commands = Commands{
 		"setauctioninfo",
 		(*Bot).handleSetAuctionInfo,
 	},
+	Command{
+		 true,
+		"editauctioninfo",
+		(*Bot).handleEditAuctionInfo,
+	},
+	//Command{
+	//	true,
+	//		"announce",
+	//	(*Bot).handleAnnounce,
+	//},
 }

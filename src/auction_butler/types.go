@@ -69,8 +69,10 @@ type Auction struct {
 	EndTime   NullTime `db:"end_time" json:"end_time"`
 	BidVal    float64  `db:"bid_val"  json:"bid_val"`
 	BidType   string   `db:"bid_type" json:"bid_type"`
-	MessageID int      `db:"bid_msg_id" json:"bid_msg_id"`
+	BidMessageID int      `db:"bid_msg_id" json:"bid_msg_id"`
 	Ended     bool     `db:"ended" json:"ended"`
+
+	exists bool
 }
 
 func (d Duration) Value() (driver.Value, error) {

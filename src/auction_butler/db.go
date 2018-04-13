@@ -1,11 +1,8 @@
 package auction_butler
 
 import (
-	"errors"
-	"time"
-
 	"database/sql"
-
+	"errors"
 	"strconv"
 
 	"github.com/jmoiron/sqlx"
@@ -133,33 +130,25 @@ func (db *DB) GetCurrentAuction() *Auction {
 		return nil
 	}
 
+	auction.exists = true
+
 	return &auction
 }
 
-func (db *DB) PutAuction(end time.Time) error {
-	_, err := db.Exec(db.Rebind(`
+func (db *DB) PutAuction(auction *Auction) error {
+	var err error
+	if auction.exists{
+		_, err = db.Exec(db.Rebind(`
+			update auction set end_time=?, bid_val=?, bid_type=?, ended=?, bid_msg_id=? where id=?`),
+			auction.EndTime.Time, auction.BidVal, auction.BidType, auction.Ended, auction.BidMessageID, auction.ID)
+	} else {
+		_, err = db.Exec(db.Rebind(`
 		insert into auction (
 			end_time, bid_val, bid_type
 		) values (?, ?, ?)`),
-		end, 0, "",
-	)
-
-	return err
-}
-
-func (db *DB) SetAuctionBid(id int, bid *Bid) error {
-	_, err := db.Exec(db.Rebind(`
-		update auction set bid_val= ?, bid_type = ? where id = ?`),
-		bid.Value, bid.CoinType, id,
-	)
-
-	return err
-}
-
-func (db *DB) EndAuction() error {
-	_, err := db.Exec(db.Rebind(`
-		update auction set ended=true where ended=false`),
-	)
+			auction.EndTime.Time, 0, "",
+		)
+	}
 
 	return err
 }
