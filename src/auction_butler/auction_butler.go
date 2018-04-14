@@ -322,13 +322,15 @@ func (bot *Bot) handleGroupMessage(ctx *Context) error {
 		}
 
 		var msg *tgbotapi.Message
-		if auction.EndTime.Time.Sub(time.Now().UTC()) > 0 {
-			msg, _ = bot.Send(ctx, "yell", "html", fmt.Sprintf(`<b>Current bid of %v/%v</b>
+		if auction.Ended == false {
+			if auction.EndTime.Time.Sub(time.Now().UTC()) > 0 {
+				msg, _ = bot.Send(ctx, "yell", "html", fmt.Sprintf(`<b>Current bid of %v/%v</b>
 Bids only please. Auction Ends in %s`, bid.String(), bid.Convert(bot.config.ConversionFactor),
-				auction.EndTime.Time.Sub(time.Now().UTC()).Truncate(10e8)))
-		} else {
-			msg, _ = bot.Send(ctx, "yell", "html", fmt.Sprintf(`<b>Current bid of %v/%v</b>
+					auction.EndTime.Time.Sub(time.Now().UTC()).Truncate(10e8)))
+			} else {
+				msg, _ = bot.Send(ctx, "yell", "html", fmt.Sprintf(`<b>Current bid of %v/%v</b>
 Bids only please.`, bid.String(), bid.Convert(bot.config.ConversionFactor)))
+			}
 		}
 
 		// update auction data

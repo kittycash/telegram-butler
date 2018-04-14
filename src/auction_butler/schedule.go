@@ -26,7 +26,7 @@ func (bot *Bot) schedule() (task, time.Time) {
 
 	if auction.EndTime.Valid {
 		bot.auctionEndTime = auction.EndTime.Time
-		return endAuction, auction.EndTime.Time.Add(time.Second*-200)
+		return endAuction, auction.EndTime.Time.Add(time.Second)
 	}
 
 	return nothing, time.Time{}
@@ -57,9 +57,9 @@ func (bot *Bot) subSchedule() (task, time.Time) {
 		}
 	}
 
-	if tsk == endAuction && time.Until(future) < time.Duration(time.Second*103) {
+	if tsk == endAuction && time.Until(future) < time.Duration(time.Second*63) {
 		bot.runningCountDown = true
-		// start countdown if there is almost 100 seconds left till the end
+		// start countdown if there is almost 60 seconds left till the end
 		return startCountDown, time.Time{}
 	}
 
@@ -90,7 +90,7 @@ func (bot *Bot) perform(tsk task) {
 
 		for i := bot.config.CountdownFrom; i>0; i-- {
 			bot.Send(noctx, "yell", "text", fmt.Sprintf("%v", i))
-			time.Sleep(time.Second * 2)
+			time.Sleep(time.Second * 3)
 		}
 		bot.Reply(&Context{
 			message: bot.lastBidMessage.UserMsg,

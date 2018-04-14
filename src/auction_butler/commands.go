@@ -60,15 +60,11 @@ func (bot *Bot) handleSetAuctionInfo(ctx *Context, command, args string) error {
 	}
 
 	bot.runningCountDown = false
-	auction = &Auction{
-		EndTime: NewNullTime(end),
-		Ended: false,
-	}
+	auction.EndTime = NewNullTime(end)
 	err = bot.db.PutAuction(auction)
 	if err != nil {
 		return bot.Reply(ctx, fmt.Sprintf("failed to set an auction: %v", err))
 	} else {
-		bot.currentAuction = auction
 		bot.Reschedule()
 		return bot.Reply(ctx, fmt.Sprintf("Auction scheduled to end at: %s", end.UTC().String()))
 	}
