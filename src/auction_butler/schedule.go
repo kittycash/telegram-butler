@@ -57,7 +57,7 @@ func (bot *Bot) subSchedule() (task, time.Time) {
 		}
 	}
 
-	if tsk == endAuction && time.Until(future) < time.Duration(time.Second*63) {
+	if tsk == endAuction && time.Until(future) < time.Duration(time.Second*83) {
 		bot.runningCountDown = true
 		// start countdown if there is almost 60 seconds left till the end
 		return startCountDown, time.Time{}
@@ -88,20 +88,22 @@ func (bot *Bot) perform(tsk task) {
 	case startCountDown:
 		bot.runningCountDown = true
 
+		bot.Reply(noctx, "The bot will now start counting down from 20. The last message from the bot will mark the end of auction." )
 		for i := bot.config.CountdownFrom; i>0; i-- {
-			bot.Send(noctx, "yell", "text", fmt.Sprintf("%v", i))
 			time.Sleep(time.Second * 3)
+			bot.Send(noctx, "yell", "text", fmt.Sprintf("%v", i))
 		}
-		bot.Reply(&Context{
-			message: bot.lastBidMessage.UserMsg,
-			User: &User{ID: bot.lastBidMessage.UserMsg.From.ID},
-		}, `Please PM @erichkaestner`)
 		bot.runningCountDown = false
 		// end auction
 		event.Ended = true
 		event.exists = true
-		fmt.Println(bot.db.PutAuction(event))
+		bot.db.PutAuction(event)
 		bot.currentAuction = nil
+
+		bot.Reply(&Context{
+			message: bot.lastBidMessage.UserMsg,
+			User: &User{ID: bot.lastBidMessage.UserMsg.From.ID},
+		}, `Please PM @erichkaestner`)
 	default:
 		log.Printf("unsupported task to perform: %v", tsk)
 	}

@@ -69,7 +69,7 @@ func (bot *Bot) handleSetAuctionInfo(ctx *Context, command, args string) error {
 	if err != nil {
 		return bot.Reply(ctx, fmt.Sprintf("failed to set an auction: %v", err))
 	} else {
-		bot.currentAuction = auction
+		bot.currentAuction = bot.db.GetCurrentAuction()
 		bot.Reschedule()
 		return bot.Reply(ctx, fmt.Sprintf("Auction scheduled to end at: %s", end.UTC().String()))
 	}
@@ -88,6 +88,7 @@ func (bot *Bot) handleEditAuctionInfo(ctx *Context, command, args string) error 
 
 	// update the auction info
 	auction.EndTime = NewNullTime(end)
+	auction.exists = true
 	err = bot.db.PutAuction(auction)
 	if err != nil {
 		return bot.Reply(ctx, fmt.Sprintf("unable to update auction: %v", err))

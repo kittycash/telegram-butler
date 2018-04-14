@@ -338,7 +338,6 @@ Bids only please.`, bid.String(), bid.Convert(bot.config.ConversionFactor)))
 		auction.BidType = bid.CoinType
 		auction.BidMessageID = msg.MessageID
 		auction.exists = true
-		bot.currentAuction = auction
 		bot.db.PutAuction(auction)
 		if bot.lastBidMessage != nil {
 			bot.DeleteMsg(bot.config.ChatID, bot.lastBidMessage.BotMsg.MessageID)

@@ -137,7 +137,7 @@ func (db *DB) GetCurrentAuction() *Auction {
 
 func (db *DB) PutAuction(auction *Auction) error {
 	var err error
-	if auction.exists{
+	if auction.exists {
 		_, err = db.Exec(db.Rebind(`
 			update auction set end_time=?, bid_val=?, bid_type=?, ended=?, bid_msg_id=? where id=?`),
 			auction.EndTime.Time, auction.BidVal, auction.BidType, auction.Ended, auction.BidMessageID, auction.ID)
