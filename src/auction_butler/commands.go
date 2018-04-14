@@ -39,6 +39,7 @@ func (bot *Bot) handleCommandHelp(ctx *Context, command, args string) error {
 /help - this text
 /setauctioninfo [end_time] [auction_info](optional) - set details for current auction
 /getauctioninfo - returns info of current auction
+/editauctionfo - change the time of an auction
 `)
 	}
 
@@ -60,11 +61,15 @@ func (bot *Bot) handleSetAuctionInfo(ctx *Context, command, args string) error {
 	}
 
 	bot.runningCountDown = false
-	auction.EndTime = NewNullTime(end)
+	auction = &Auction{
+		EndTime: NewNullTime(end),
+		Ended: false,
+	}
 	err = bot.db.PutAuction(auction)
 	if err != nil {
 		return bot.Reply(ctx, fmt.Sprintf("failed to set an auction: %v", err))
 	} else {
+		bot.currentAuction = auction
 		bot.Reschedule()
 		return bot.Reply(ctx, fmt.Sprintf("Auction scheduled to end at: %s", end.UTC().String()))
 	}
