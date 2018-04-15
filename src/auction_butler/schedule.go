@@ -26,7 +26,7 @@ func (bot *Bot) schedule() (task, time.Time) {
 
 	if auction.EndTime.Valid {
 		bot.auctionEndTime = auction.EndTime.Time
-		return endAuction, auction.EndTime.Time.Add(time.Second)
+		return endAuction, auction.EndTime.Time.Add(time.Second * -60)
 	}
 
 	return nothing, time.Time{}
@@ -88,7 +88,7 @@ func (bot *Bot) perform(tsk task) {
 	case startCountDown:
 		bot.runningCountDown = true
 
-		bot.Reply(noctx, "The bot will now start counting down from 20. The last message from the bot will mark the end of auction." )
+		bot.Send(noctx, "yell", "html", `<i>Alright cats and kitties. Get all your cryptos together and be prepared. I'm going to count down from 20 to 1. The latest bid in the countdown will be approved by me as winning bid. Good luck!</i>`)
 		for i := bot.config.CountdownFrom; i>0; i-- {
 			time.Sleep(time.Second * 3)
 			bot.Send(noctx, "yell", "text", fmt.Sprintf("%v", i))

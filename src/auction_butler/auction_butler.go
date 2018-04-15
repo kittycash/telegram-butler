@@ -496,7 +496,7 @@ func (bot *Bot) handleUpdate(update *tgbotapi.Update) error {
 
 func (bot *Bot) Start() error {
 	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 0
+	u.Timeout = 2
 
 	curAuction := bot.db.GetCurrentAuction()
 
