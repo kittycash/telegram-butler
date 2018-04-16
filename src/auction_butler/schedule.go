@@ -88,7 +88,7 @@ func (bot *Bot) perform(tsk task) {
 	case startCountDown:
 		bot.runningCountDown = true
 
-		bot.Send(noctx, "yell", "html", `<i>Alright cats and kitties. Get all your cryptos together and be prepared. I'm going to count down from 20 to 1. The latest bid in the countdown will be approved by me as winning bid. Good luck!</i>`)
+		bot.Send(noctx, "yell", "html", `<i>Alright cats and kitties. Get all your cryptos together and be prepared. I'm going to count down from 20 to 1. The last highest bid in the countdown will be approved by me as winning bid. Good luck!</i>`)
 		for i := bot.config.CountdownFrom; i>0; i-- {
 			time.Sleep(time.Second * 3)
 			bot.Send(noctx, "yell", "text", fmt.Sprintf("%v", i))
@@ -103,7 +103,7 @@ func (bot *Bot) perform(tsk task) {
 		bot.Reply(&Context{
 			message: bot.lastBidMessage.UserMsg,
 			User: &User{ID: bot.lastBidMessage.UserMsg.From.ID},
-		}, `Please PM @erichkaestner`)
+		}, fmt.Sprintf(`Congratulations %s, you've won the auction! Please contact @erichkaestner for the details on how to claim your new Legendary Kitty.`, bot.lastBidMessage.UserMsg.From.FirstName))
 	default:
 		log.Printf("unsupported task to perform: %v", tsk)
 	}
