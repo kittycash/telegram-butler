@@ -48,6 +48,7 @@ type Bid struct {
 	Value float64
 	// btc/sky
 	CoinType string
+	Interpreted bool
 }
 
 type CommandHandler func(*Bot, *Context, string, string) error
@@ -197,7 +198,7 @@ func (bot *Bot) handleUserJoin(ctx *Context, user *tgbotapi.User) error {
 	}
 
 	log.Printf("user joined: %s", dbuser.NameAndTags())
-	msg, err := bot.Send(ctx, "reply", "html", `Welcome to the KittyCash Auction group. Please familiarise yourself with the rules in the <a href="t.me/KittyCashAuction/746">pinned message</a> before bidding on a Legendary Kitty.`)
+	msg, err := bot.Send(ctx, "reply", "html", `Welcome to the KittyCash Auction group. Please familiarise yourself with the rules in the <a href="t.me/KittyCashAuction/1104">pinned message</a> before bidding on a Legendary Kitty.`)
 
 	if err != nil {
 		return err
@@ -278,7 +279,7 @@ func (bot *Bot) handleGroupMessage(ctx *Context) error {
 		}
 	}
 
-	if ctx.User != nil {
+	if ctx.User != nil && ctx.message.NewChatMembers == nil {
 		bid, err := findBid(ctx.message.Text)
 		if err != nil {
 			if err == ErrNoBidFound && !ctx.User.Admin {
@@ -304,7 +305,16 @@ func (bot *Bot) handleGroupMessage(ctx *Context) error {
 		} else {
 			switch bid.CoinType {
 			case "BTC":
-				if bid.Value*float64(bot.config.ConversionFactor) <= auction.BidVal {
+				convertedBid := bid.Value*float64(bot.config.ConversionFactor)
+				if bid.Interpreted {
+					if (convertedBid / auction.BidVal) > float64(2) {
+						if !ctx.User.Admin {
+							bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
+						}
+						return errors.New("invalid bid")
+					}
+				}
+				if  convertedBid <= auction.BidVal {
 					if !ctx.User.Admin {
 						bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
 					}
@@ -312,7 +322,16 @@ func (bot *Bot) handleGroupMessage(ctx *Context) error {
 
 				}
 			case "SKY":
-				if bid.Value/float64(bot.config.ConversionFactor) <= auction.BidVal {
+				convertedBid := bid.Value/float64(bot.config.ConversionFactor)
+				if bid.Interpreted {
+					if (convertedBid / auction.BidVal) > float64(2) {
+						if !ctx.User.Admin {
+							bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
+						}
+						return errors.New("invalid bid")
+					}
+				}
+				if convertedBid <= auction.BidVal {
 					if !ctx.User.Admin {
 						bot.DeleteMsg(bot.config.ChatID, ctx.message.MessageID)
 					}
@@ -452,7 +471,6 @@ func (bot *Bot) handleUpdate(update *tgbotapi.Update) error {
 	ctx := Context{message: update.Message}
 	if u := ctx.message.From; u != nil {
 		if !bot.runningCountDown {
-			log.Info("Comes here")
 			dbuser := bot.db.GetUser(u.ID)
 			if dbuser == nil {
 				member, err := bot.telegram.GetChatMember(tgbotapi.ChatConfigWithUser{

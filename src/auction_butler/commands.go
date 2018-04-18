@@ -100,6 +100,43 @@ func (bot *Bot) handleEditAuctionInfo(ctx *Context, command, args string) error 
 	return bot.Reply(ctx, "Auction updated!")
 }
 
+func (bot *Bot) handleSetBid(ctx *Context, command, args string) error {
+	auction := bot.currentAuction
+	if auction == nil {
+		return bot.Reply(ctx, fmt.Sprintf("No auction is scheduled"))
+	}
+
+	bid, err := findBid(args)
+	if err != nil {
+		return bot.Reply(ctx, err.Error())
+	}
+	// update the auction info
+	auction.BidVal = bid.Value
+	auction.BidType = bid.CoinType
+	err = bot.db.PutAuction(auction)
+	if err != nil {
+		return bot.Reply(ctx, fmt.Sprintf("unable to update auction: %v", err))
+	}
+
+	msg, _ := bot.Send(ctx, "yell", "html", fmt.Sprintf(`<b>Current bid of %v/%v</b>
+Bids only please. Auction Ends in %s`, bid.String(), bid.Convert(bot.config.ConversionFactor),
+		auction.EndTime.Time.Sub(time.Now().UTC()).Truncate(10e8)))
+
+	if bot.lastBidMessage != nil {
+		bot.DeleteMsg(bot.config.ChatID, bot.lastBidMessage.BotMsg.MessageID)
+		bot.lastBidMessage.BotMsg = msg
+		bot.lastBidMessage.UserMsg = ctx.message
+	} else {
+		bot.lastBidMessage = &LastBidMessage{
+			BotMsg:  msg,
+			UserMsg: ctx.message,
+		}
+	}
+
+	return bot.Reply(ctx, "Bid updated")
+}
+
+
 
 //func (bot *Bot) handleAnnounce(ctx, command, args string)
 
@@ -198,6 +235,11 @@ var commands = Commands{
 		 true,
 		"editauctioninfo",
 		(*Bot).handleEditAuctionInfo,
+	},
+	Command{
+		true,
+		"setbid",
+		(*Bot).handleSetBid,
 	},
 	//Command{
 	//	true,

@@ -96,7 +96,7 @@ func parseBid(bid string, foundBidType string) *Bid {
 	}
 
 	foundBidType = strings.ToUpper(foundBidType)
-
+	finalBid := &Bid{}
 	if foundBidType != "" {
 		if foundBidType == "SKY" || foundBidType == "BTC" {
 			bidType = foundBidType
@@ -104,7 +104,8 @@ func parseBid(bid string, foundBidType string) *Bid {
 			return nil
 		}
 	} else {
-		if bidValue > 5 {
+		finalBid.Interpreted = true
+		if bidValue > 4 {
 			bidType = "SKY"
 		} else {
 			bidType = "BTC"
@@ -117,6 +118,8 @@ func parseBid(bid string, foundBidType string) *Bid {
 		bidValue = toFixed(bidValue, 0)
 	}
 
+	finalBid.CoinType = bidType
+	finalBid.Value = bidValue
 	return &Bid{
 		Value:    bidValue,
 		CoinType: bidType,
